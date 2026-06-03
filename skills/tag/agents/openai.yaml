@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tag"
+  short_description: "指定 tag 并发布中文 Release 说明"
+  default_prompt: "Use $tag to create and publish a user-specified release tag with generated release notes."
