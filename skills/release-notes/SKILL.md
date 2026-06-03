@@ -10,22 +10,20 @@ description: 根据 GitHub 仓库当前分支最新代码与上一个 tag 的差
 ## 工作流程
 
 1. 先确认当前目录是目标 Git 仓库；如果用户指定分支、tag 或路径，按用户输入执行。
-2. 运行本技能目录下的脚本收集上下文。先把 `scripts/collect_release_context.py` 解析为相对于当前 `release-notes` 技能 `SKILL.md` 所在目录的绝对路径，再在目标 Git 仓库中执行：
+2. 运行脚本收集上下文：
 
 ```bash
-RELEASE_NOTES_SKILL_DIR="<release-notes skill dir>"
-RELEASE_NOTES_SCRIPT="$RELEASE_NOTES_SKILL_DIR/scripts/collect_release_context.py"
-python3 "$RELEASE_NOTES_SCRIPT" --repo .
+python3 .codex/skills/release-notes/scripts/collect_release_context.py
 ```
 
 常用参数：
 
 ```bash
 # 指定仓库路径、目标引用或基准 tag
-python3 "$RELEASE_NOTES_SCRIPT" --repo . --target-ref HEAD --base-tag v1.2.3
+python3 .codex/skills/release-notes/scripts/collect_release_context.py --repo . --target-ref HEAD --base-tag v1.2.3
 
 # 输出 JSON，便于进一步脚本化处理
-python3 "$RELEASE_NOTES_SCRIPT" --repo . --json
+python3 .codex/skills/release-notes/scripts/collect_release_context.py --json
 ```
 
 3. 阅读脚本输出的提交分类、文件变化、风险提示和统计信息；必要时用 `git diff <base-tag>..<target-ref> -- <file>` 查看关键文件细节。
@@ -33,8 +31,7 @@ python3 "$RELEASE_NOTES_SCRIPT" --repo . --json
 5. 如果用户要求保存文件、创建 tag 或发布 GitHub Release，先运行结构校验；校验失败时修改发布说明并重新校验，不要发布未通过校验的内容：
 
 ```bash
-VALIDATE_RELEASE_NOTES_SCRIPT="$RELEASE_NOTES_SKILL_DIR/scripts/validate_release_notes.py"
-python3 "$VALIDATE_RELEASE_NOTES_SCRIPT" "$NOTES_FILE"
+python3 .codex/skills/release-notes/scripts/validate_release_notes.py "$NOTES_FILE"
 ```
 
 除非用户要求保存文件，否则直接输出 Markdown 内容。

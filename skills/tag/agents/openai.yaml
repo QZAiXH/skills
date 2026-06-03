@@ -1,4 +1,4 @@
 interface:
   display_name: "Tag"
-  short_description: "指定 tag 并发布中文 Release 说明"
-  default_prompt: "Use $tag to create and publish a user-specified release tag with generated release notes."
+  short_description: "创建 annotated tag 并触发发布流水线"
+  default_prompt: "Use $tag to create and push a user-specified annotated tag with generated release notes."
