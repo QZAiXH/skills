@@ -13,7 +13,9 @@ description: 指定用户提供的 tag，调用 release-notes 技能生成中文
 - 在任何会创建 tag、创建 release、推送远端的命令前，先询问用户选择 `push` 还是 `gh`。如果用户已明确指定方式，复述该方式后继续。
 - 只基于已提交的 `HEAD` 生成发布说明。工作区有未提交变更时，明确提醒这些变更不会包含在默认发布说明中。
 - 不能使用 `gh --generate-notes` 替代 `release-notes` 技能。
+- 发布说明文件必须通过 `release-notes` 技能里的 `scripts/validate_release_notes.py` 校验后，才能创建 tag、推送 tag 或创建 GitHub Release；校验失败时停止发布并修正文案。
 - 遇到鉴权、权限或远端拒绝问题时，不要尝试处理凭据；保留发布说明文件路径，并把用户可以自行执行的命令列出来。
+- `git push origin "$TAG"` 或 `gh release create ...` 成功返回后，立即进入最终回复；不要等待 GitHub Actions、Docker 镜像编译、部署流水线或任何异步任务完成，也不要主动轮询构建状态。
 
 ## 工作流程
 
@@ -35,11 +37,12 @@ git ls-remote --tags origin "$TAG"
 
 3. 调用 release-notes 技能：
    - 读取已安装的 `release-notes` 技能。
-   - 解析 `release-notes` 技能里的 `scripts/collect_release_context.py` 时，以该技能的 `SKILL.md` 所在目录为基准，并使用绝对路径执行。
+   - 解析 `release-notes` 技能里的脚本时，以该技能的 `SKILL.md` 所在目录为基准，并使用绝对路径执行。
    - 按该技能流程运行上下文收集脚本，例如：
 
 ```bash
-RELEASE_NOTES_SCRIPT="<release-notes skill dir>/scripts/collect_release_context.py"
+RELEASE_NOTES_SKILL_DIR="<release-notes skill dir>"
+RELEASE_NOTES_SCRIPT="$RELEASE_NOTES_SKILL_DIR/scripts/collect_release_context.py"
 python3 "$RELEASE_NOTES_SCRIPT" --repo . --target-ref HEAD
 ```
 
@@ -49,6 +52,15 @@ python3 "$RELEASE_NOTES_SCRIPT" --repo . --target-ref HEAD
 ```bash
 NOTES_FILE="/tmp/release-notes-${TAG}.md"
 ```
+
+   - 校验发布说明文件结构，确保不是裸项目符号列表，也不是上下文收集脚本输出：
+
+```bash
+VALIDATE_RELEASE_NOTES_SCRIPT="$RELEASE_NOTES_SKILL_DIR/scripts/validate_release_notes.py"
+python3 "$VALIDATE_RELEASE_NOTES_SCRIPT" "$NOTES_FILE"
+```
+
+   - 如果校验失败，先修改 `$NOTES_FILE` 并重新运行校验；不要继续执行 `git tag`、`git push` 或 `gh release create`。
 
 4. 根据用户选择发布。
 
@@ -60,6 +72,8 @@ NOTES_FILE="/tmp/release-notes-${TAG}.md"
 git tag -a "$TAG" -F "$NOTES_FILE" HEAD
 git push origin "$TAG"
 ```
+
+`git push` 成功返回后，发布动作即完成；不要检查或等待后续 Docker 编译、CI、部署任务。
 
 如果 `git tag` 已成功但 `git push` 失败，只给用户补充推送命令：
 
@@ -89,6 +103,8 @@ gh auth status
 gh release create "$TAG" --target "$(git rev-parse HEAD)" --title "$TAG" --notes-file "$NOTES_FILE"
 ```
 
+`gh release create` 成功返回后，发布动作即完成；不要检查或等待后续 Docker 编译、CI、部署任务。
+
 如果要求只能基于已经存在的远端 tag 创建 Release，先让用户确认改用 `push` 方式创建并推送 tag，再执行：
 
 ```bash
@@ -96,6 +112,31 @@ gh release create "$TAG" --verify-tag --title "$TAG" --notes-file "$NOTES_FILE"
 ```
 
 权限失败时，不要继续尝试登录或修改凭据；输出用户可自行执行的 `gh release create ...` 命令和 `NOTES_FILE` 路径。
+
+## 发布说明校验失败时
+
+保持 `$NOTES_FILE` 路径不变，按 `release-notes` 的标准章节结构重写内容。最小合格结构示例：
+
+```markdown
+## 版本亮点
+
+- <1-3 条真实发布亮点>
+
+## 新增功能
+
+- <真实变更>
+
+## Contributors
+
+- @<github-username>
+- [github-actions bot](https://github.com/apps/github-actions)
+```
+
+修正后重新运行：
+
+```bash
+python3 "$VALIDATE_RELEASE_NOTES_SCRIPT" "$NOTES_FILE"
+```
 
 ## 最终回复
 

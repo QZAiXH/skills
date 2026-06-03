@@ -13,7 +13,8 @@ description: 根据 GitHub 仓库当前分支最新代码与上一个 tag 的差
 2. 运行本技能目录下的脚本收集上下文。先把 `scripts/collect_release_context.py` 解析为相对于当前 `release-notes` 技能 `SKILL.md` 所在目录的绝对路径，再在目标 Git 仓库中执行：
 
 ```bash
-RELEASE_NOTES_SCRIPT="<release-notes skill dir>/scripts/collect_release_context.py"
+RELEASE_NOTES_SKILL_DIR="<release-notes skill dir>"
+RELEASE_NOTES_SCRIPT="$RELEASE_NOTES_SKILL_DIR/scripts/collect_release_context.py"
 python3 "$RELEASE_NOTES_SCRIPT" --repo .
 ```
 
@@ -28,7 +29,15 @@ python3 "$RELEASE_NOTES_SCRIPT" --repo . --json
 ```
 
 3. 阅读脚本输出的提交分类、文件变化、风险提示和统计信息；必要时用 `git diff <base-tag>..<target-ref> -- <file>` 查看关键文件细节。
-4. 生成最终发布说明，必须使用中文。除非用户要求保存文件，否则直接输出 Markdown 内容。
+4. 生成最终发布说明，必须使用中文，且必须写成完整 Markdown 章节，不要输出裸项目符号列表。
+5. 如果用户要求保存文件、创建 tag 或发布 GitHub Release，先运行结构校验；校验失败时修改发布说明并重新校验，不要发布未通过校验的内容：
+
+```bash
+VALIDATE_RELEASE_NOTES_SCRIPT="$RELEASE_NOTES_SKILL_DIR/scripts/validate_release_notes.py"
+python3 "$VALIDATE_RELEASE_NOTES_SCRIPT" "$NOTES_FILE"
+```
+
+除非用户要求保存文件，否则直接输出 Markdown 内容。
 
 ## 对比规则
 
@@ -40,6 +49,23 @@ python3 "$RELEASE_NOTES_SCRIPT" --repo . --json
 - 仅把已提交内容作为发布说明依据；如果工作区有未提交变更，提醒用户这些变更不会包含在默认结果中。
 
 ## 输出格式
+
+### 硬性输出契约
+
+- 最终发布说明必须包含 Markdown 二级标题，禁止只输出连续项目符号。
+- 第一个二级标题必须是 `## 版本亮点`，并包含 1-3 条真实亮点。
+- 必须包含 `## Contributors`，并列出至少一个贡献者。优先使用真实 GitHub login 的 `@username`；GitHub 会把 Release description 中的 @mention 渲染为链接，并在发布页 Contributors 区域显示头像。无法确认 login 时，使用指向 GitHub profile/app 的 Markdown 链接，不要只写纯名字。
+- 至少包含 3 个标准章节：`## 版本亮点`、一个变更章节、`## Contributors`。
+- 只能使用下列标准章节；没有内容的章节必须省略，不要用"无"、"暂无"、"无明确修复"填充：
+  - `## 版本亮点`
+  - `## 新增功能`
+  - `## 问题修复`
+  - `## 优化与重构`
+  - `## 破坏性变更`
+  - `## 升级注意事项`
+  - `## 其他变更`
+  - `## Contributors`
+- 不要把上下文收集脚本输出直接当作发布说明；最终内容不得包含 `# Release Notes Context`、`## 提交分类`、`## 变更文件`、`## Git Diff Stat` 等中间分析标题。
 
 默认使用以下 GitHub Releases 常见结构。没有内容的章节可以省略，保持简洁。
 
@@ -74,7 +100,8 @@ python3 "$RELEASE_NOTES_SCRIPT" --repo . --json
 
 ## Contributors
 
-- @<github-username 或作者名>
+- @<github-username>
+- [github-actions bot](https://github.com/apps/github-actions)
 ```
 
 ## 写作要求
@@ -85,6 +112,7 @@ python3 "$RELEASE_NOTES_SCRIPT" --repo . --json
 - 对外部用户可见的能力放在前面，内部重构、测试和 CI 放在后面。
 - 破坏性变更、数据库迁移、配置项变化、依赖升级和部署注意事项必须单独突出。
 - 不确定是否属于破坏性变更时，用谨慎表述，如"可能需要验证"或"建议检查"。
+- Contributors 必须先通过 PR author、GitHub commit API、`gh pr view` 或 `gh api users/<login>` 尽量解析为 GitHub login；不要把 Git commit author name 直接当作 GitHub 用户名。
 - 保留必要的代码标识符、接口路径、配置名和 tag 名；其余说明用中文。
 
 ## 补充检查
