@@ -1,14 +1,11 @@
-Skills are organized into bucket folders under `skills/`:
+1. 不同的技能之间不要相互耦合，即 A 技能在非必须情况下不要看 B 技能。
+2. skill 是独立安装单元，运行时每个 skill 只能看到自己包内的文件。A 技能的 SKILL.md 里写 `B-skill/reference/xxx.md` 这种引用在运行时**根本读不到**——skill 之间没有共享的文件系统父目录。跨 skill 共享的参考文档必须走"工作项目"这一层：由 `cs-onboard` 从技能包复制到项目的 `.codestable/reference/`，其他 skill 用项目相对路径 `.codestable/reference/xxx.md` 读取。要改共享口径时改 `cs-onboard/reference/` 下的模板，新项目 onboard 时带上新版本。
 
-- `engineering/` — daily code work
-- `productivity/` — daily non-code workflow tools
-- `misc/` — kept around but rarely used
-- `personal/` — tied to my own setup, not promoted
-- `in-progress/` — drafts not yet ready to ship
-- `deprecated/` — no longer used
+增加、更新技能时注意更新其他相关技能中的表述。
 
-Every skill in `engineering/`, `productivity/`, or `misc/` must have a reference in the top-level `README.md` and an entry in `.claude-plugin/plugin.json`. Skills in `personal/`, `in-progress/`, and `deprecated/` must not appear in either.
 
-Each skill entry in the top-level `README.md` must link the skill name to its `SKILL.md`.
+单md文档不能超过300行，超过必须拆分。
 
-Each bucket folder has a `README.md` that lists every skill in the bucket with a one-line description, with the skill name linked to its `SKILL.md`.
+
+### 核心原则
+言简意赅
