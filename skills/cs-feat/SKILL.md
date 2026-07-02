@@ -1,18 +1,18 @@
 ---
 name: cs-feat
-description: 新功能开发的子流程入口，把"加个 X 能力"从想法走到验收闭环。触发：用户说"做新功能"、"加个 X"、"实现 XX"。只做路由，根据已有产物决定走 brainstorm / design / fastforward / implement / acceptance。不处理 bug。
+description: Feature 路由入口。触发：新功能/加 X/实现 XX，按状态进入 design/impl/review/QA/accept。
 ---
 
 # cs-feat
 
 ## 启动必读
 
-开始任何判断或动作前，先读取 `.codestable/attention.md`；缺失则视为骨架不完整，提示先补齐或运行 `cs-onboard`，不要回退到外部 AI 入口文件。
+开始任何判断或动作前，先执行 CodeStable preflight：读 `.codestable/attention.md`；缺失先 `cs-onboard`；不读外部 AI 入口替代（详见 `.codestable/reference/execution-conventions.md`）。
 
 新功能流程在"需求"和"代码"之间塞了一份方案文件，让两边有交接点——AI 直接拿到需求就写代码会出三个老问题：名字跟原代码对不上、改着改着改出范围、改完不留存档。
 
 ```
-(想法模糊先去 cs-brainstorm 分诊) → 方案设计（名词层 + 编排层 + 验收契约 + 推进策略切片）→ 分步实现 → 验收闭环
+(想法模糊先去 cs-brainstorm 分诊) → 方案设计（名词层 + 编排层 + 验收契约 + 推进策略切片）→ 分步实现 → 代码审查 → QA 验证 → 验收闭环
 ```
 
 brainstorm 是讨论层独立入口，会分诊：case 1（清楚 → 直接 design）/ case 2（小需求继续讨论 → 落 brainstorm note）/ case 3（大需求 → 移交 `cs-roadmap`）。只有 case 2 在 feature 目录产出 brainstorm note。
@@ -28,34 +28,40 @@ brainstorm 是讨论层独立入口，会分诊：case 1（清楚 → 直接 des
 ├── {slug}-brainstorm.md       ← 阶段 0 产物（仅 case 2 落盘）
 ├── {slug}-intent.md           ← 阶段 1 可选前置草稿（用户自己写半成品）
 ├── {slug}-design.md           ← 阶段 1 方案文件
+├── {slug}-design-review.md    ← 阶段 1.5 人审前方案审查报告
 ├── {slug}-checklist.yaml      ← 阶段 1 生成 steps + checks，2/3 阶段更新 status
+├── {slug}-review.md           ← 阶段 2.5 代码审查报告
+├── {slug}-qa.md               ← 阶段 2.6 QA 验证报告
 └── {slug}-acceptance.md       ← 阶段 3 验收报告
 ```
 
 目录命名 `YYYY-MM-DD-{英文 slug}`，日期取首次创建当天定了不动；slug 小写字母 / 数字 / 连字符。
 
-为什么聚一起：以后查"那个导出 CSV 功能当时怎么决定的"，brainstorm / design / acceptance 都在一处。feature 和 issue 分别放在 `.codestable/features/` 和 `.codestable/issues/` 因为归档逻辑不一样。
+为什么聚一起：以后查"那个导出 CSV 功能当时怎么决定的"，brainstorm / design / review / QA / acceptance 都在一处。feature 和 issue 分别放在 `.codestable/features/` 和 `.codestable/issues/` 因为归档逻辑不一样。
 
 实现 feature 时顺手发现的 bug → 记成新 issue，**不在 feature PR 里偷偷修**——验收时分不清范围，git blame 找不到为什么改。
 
 ---
 
-## 四个阶段
+## 标准阶段
 
 | 阶段 | 子技能 | 产出 | 谁主导 |
 |---|---|---|---|
 | 0 brainstorm（可选，独立入口） | `cs-brainstorm` | case 2 时产出 brainstorm note | AI 思考伙伴，用户拍板 |
-| 1 方案设计 | `cs-feat-design` | design.md + checklist.yaml | AI 起草，用户整体 review |
+| 1 方案设计 | `cs-feat-design` | design.md + checklist.yaml | AI 起草候选方案 |
+| 1.5 方案审查 | `cs-feat-design-review` | design-review.md | Task agent / AI 人审前审查 |
 | 2 分步实现 | `cs-feat-impl` | 代码 + 阶段汇报 | AI 按方案执行 |
+| 2.5 代码审查 | `cs-code-review` | review.md | AI 只读审查，用户决定是否修 |
+| 2.6 QA 验证 | `cs-feat-qa` | qa.md | AI 运行证据，用户确认风险 |
 | 3 验收闭环 | `cs-feat-accept` | acceptance.md | AI 逐层核对，用户终审 |
 
-阶段间有人工 checkpoint。上一阶段没拿到用户明确放行，下一阶段别开始——防止 AI 一口气从需求跑到代码、跑出来才发现走偏。
+阶段间有 gate 和人工 checkpoint。方案先过 design-review，再交给用户整体确认；用户没明确放行，下一阶段别开始——防止 AI 一口气从需求跑到代码、跑出来才发现走偏。
 
 阶段 0 可选且是 feature 流程的**外部入口**——`cs-brainstorm` 同时服务 feature 和 roadmap。case 3（大需求）讨论被移交给 `cs-roadmap` 不再回 feature 流程；roadmap 拆出子 feature 后从 `cs-feat-design` 的"从 roadmap 条目起头"入口进来。
 
 ### Fastforward 模式
 
-需求清楚 + 范围小时走完整四阶段太啰嗦。fastforward 把 design 压成 4 节（需求摘要 / 设计方案 / 验收标准 / 推进步骤），用户一次确认后直接实现。触发："快速模式"、"fastforward"、"直接开干"、"别那么多步骤"，去 `cs-feat-ff`。
+需求清楚 + 范围小时走标准流程太啰嗦。fastforward 把 design 压成 4 节（需求摘要 / 设计方案 / 验收标准 / 推进步骤），用户一次确认后直接实现。触发："快速模式"、"fastforward"、"直接开干"、"别那么多步骤"，去 `cs-feat-ff`。
 
 **别走** fastforward：跨多个子系统、有术语冲突风险、推进步骤超过 4 步——这些情况跳过 design 意味着 AI 和用户没共同确认过同一份方案，实现完容易发现彼此理解不一样。
 
@@ -74,9 +80,18 @@ brainstorm 是讨论层独立入口，会分诊：case 1（清楚 → 直接 des
 | `{slug}-intent.md` 已填好 | `cs-feat-design`（读 intent 作输入） |
 | 用户说"快速模式 / fastforward" | `cs-feat-ff` |
 | `{slug}-brainstorm.md` 已存在，要进设计 | `cs-feat-design` |
+| `{slug}-design.md` 是 draft 且没有 `{slug}-design-review.md` | `cs-feat-design-review` |
+| `{slug}-design-review.md` changes-requested / blocked | `cs-feat-design` 修订后重跑 `cs-feat-design-review` |
+| `{slug}-design-review.md` passed，但 design 还没 approved | 交给用户整体 review，确认后回 `cs-feat-design` 标 approved |
 | `{slug}-design.md` 已 approved、代码没动 | `cs-feat-impl` |
 | fastforward design 已确认 | `cs-feat-impl` |
-| 代码已写完要验收 | `cs-feat-accept` |
+| 代码已写完但没有 `{slug}-review.md` | `cs-code-review` |
+| `{slug}-review.md` 有 unresolved blocking findings | `cs-feat-impl` 的 review-fix 模式 |
+| `{slug}-review.md` 已 passed，但没有 `{slug}-qa.md` | `cs-feat-qa` |
+| `{slug}-qa.md` failed / blocked | `cs-feat-impl` 的 qa-fix 模式（修完重跑 review → QA） |
+| `{slug}-qa.md` 已 passed，代码要验收 | `cs-feat-accept` |
+| 用户直接说"代码已写完要验收"但没有 review 报告 | 先 `cs-code-review`，不要跳到 accept |
+| 用户直接说"代码已写完要验收"但没有 QA 报告 | review passed 后先 `cs-feat-qa`，不要跳到 accept |
 | 用户说"我想要一个 X 系统"大需求 | 转 `cs-brainstorm` 分诊（大概率 case 3 → `cs-roadmap`） |
 | roadmap 里某条子 feature 该启动 | `cs-feat-design` 的"从 roadmap 条目起头"入口 |
 | 不确定 design 是否完整 | 自己读一遍，按上面对号 |
@@ -112,4 +127,4 @@ brainstorm 是讨论层独立入口，会分诊：case 1（清楚 → 直接 des
 - `.codestable/reference/system-overview.md` — CodeStable 体系总览
 - `.codestable/reference/shared-conventions.md` — 跨阶段共享口径、目录结构、checklist 生命周期
 - `.codestable/attention.md` — CodeStable 启动注意事项和项目硬约束
-- 项目架构总入口 — 方案设计阶段需要查
+- `.codestable/requirements/CONTEXT.md` + `requirements/adrs/` — 方案设计阶段需要查的领域术语与拍板决策

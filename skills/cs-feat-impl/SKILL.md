@@ -1,65 +1,53 @@
 ---
 name: cs-feat-impl
-description: feature 流程阶段 2——按 TDD 垂直切片推进，每个行为切片走 RED→GREEN→REFACTOR 闭环。触发：用户说"方案确认了开始实现"、"按方案写代码"、"开工"。前提是 design 已 approved 且有 checklist。遇到方案外情况要回方案谈不要硬冲。
+description: Feature 实现。触发：approved design/checklist 后开工，或修 review/QA blocking。
 ---
 
 # cs-feat-impl
 
 ## 启动必读
 
-开始任何判断或动作前，先读取 `.codestable/attention.md`；缺失则视为骨架不完整，提示先补齐或运行 `cs-onboard`，不要回退到外部 AI 入口文件。
+开始任何判断或动作前，先执行 CodeStable preflight：读 `.codestable/attention.md`；缺失先 `cs-onboard`；不读外部 AI 入口替代（详见 `.codestable/reference/execution-conventions.md`）。
 
-到这一步用户已经在方案上签过字了，你的活是把方案变成代码。**核心原则：垂直切片、立即验证、行为驱动**。每个行为切片走完整 TDD 闭环（RED → GREEN → REFACTOR），不做水平切片（先写所有测试再写所有实现）。
+到这一步用户已经在方案上签过字了，你的活是把方案变成代码。容易出问题的不是写代码本身，而是**实现路上发现方案没覆盖到的情况时怎么办**——硬冲下去就把方案当摆设了。下面整套规则就是为了让"停下来"成为默认动作。
 
-容易出问题的不是写代码本身，而是**实现路上发现方案没覆盖到的情况时怎么办**——硬冲下去就把方案当摆设了。下面整套规则就是为了让"停下来"成为默认动作。
+**执行原则**：实现不是"一口气改完再说"，而是按已批准 checklist 做可验证增量。每一步要先明确退出信号，做完立刻拿证据验证；失败先诊断和重试，仍失败再写窄范围修复说明；连续失败才交还用户。不要让未验证的中间状态滚进下一步。
+
+**推进原则**：实现阶段要让任务随时可恢复、可归因、可审计。开始前先确认基线；每步完成就更新 checklist 和证据；失败只修当前失败标准；每步都检查清洁度；遇到用户中断就在 step 边界停；学到会影响后续 feature 的知识先记录为候选，交给 acceptance 收尾沉淀。
 
 > 共享路径与命名约定看 `.codestable/reference/shared-conventions.md` 第 0 节。
 
 ---
 
-## TDD 推进原则
+## 执行 gate（worktree + commit）
 
-### 反模式：水平切片
+进入实现前运行 start gate，路径用项目运行时 `.codestable/tools/...`：
 
-**禁止**先写所有测试再写所有实现（"水平切片"）。这会导致：
-- 测试基于想象的行为而非实际行为
-- 测试耦合到实现细节
-- 出问题时无法定位是哪一步引入的
-
-### 正确做法：垂直切片
-
-每个行为切片走完整闭环：
-
-```
-RED   → 写一个测试（测试公开接口，描述行为）→ 测试失败
-GREEN → 写最少代码让测试通过 → 测试通过
-REFACTOR → 重构（保持测试通过）
+```bash
+python3 .codestable/tools/codestable-worktree-gate.py --root . --json start --unit .codestable/features/YYYY-MM-DD-{slug}
 ```
 
-一个切片 = 一个用户可感知的行为变化。完成一个切片后立即验证，再进入下一个。
+gate 不通过就不要开始改代码；用户批准 override 时先在 unit 目录写 `worktree-override.md`（reason / scope / approval）。
 
-### 测试原则
+dogfood / 临时隔离仓库例外：只有当用户任务明确要求在一次性隔离 repo 里真实执行 workflow，且该 repo 不是交付目标主仓库时，允许不创建 linked worktree；仍必须在 unit 目录写 `worktree-override.md`，记录 `reason=dogfood-ephemeral-repo`、用户授权原文、影响范围和后续清理策略。不能把这个例外用于普通 feature 实现。
 
-**测试行为，不测实现**：
-- ✅ 测试公开接口（函数、API、组件 props）
-- ✅ 描述 WHAT（"用户可以用有效购物车结账"）
-- ✅ 测试会在重构后继续通过
-- ❌ 测试私有方法
-- ❌ mock 内部协作者
-- ❌ 断言调用次数 / 顺序
-- ❌ 绕过接口直接查数据库验证
+实现完成、输出汇报前运行 commit gate：
+
+```bash
+python3 .codestable/tools/codestable-worktree-gate.py --root . --json commit --unit .codestable/features/YYYY-MM-DD-{slug}
+```
+
+gate 不通过就先处理 findings，不把"测试已过"当成完成。gate 工具的安装与 branch-guard hook 说明见 `.codestable/reference/branch-guard-hooks.md`。
 
 ---
 
 ## 写代码时的三条姿态
 
-具体规则是这三条姿态的落点，理解姿态比记规则重要。
+先做 `.codestable/reference/shared-conventions.md` 第 7 节的**第一性原则 pre-pass**：明确外部行为、不可破约束、最小充分改动和必须不写的东西。具体规则是这三条姿态的落点，理解姿态比记规则重要。
 
 ### 1. 默认写最少的代码
 
 只写当前步骤明确要的东西。不顺手加"以后可能要"的可配置项、抽象层、参数开关、防御性兜底。判据：写完一段觉得"是不是还得加点 X"，先问 X 是不是当前用户能感知到的——不是就别加。整体写完一看 200 行其实 50 行能讲清楚 → 重写。多出来的代码不是中性的，是后人维护的负担。
-
-GREEN 阶段的"最少代码"：**只为让当前测试通过**。不提前设计、不预留扩展点、不考虑下一个测试——那是下一轮的事。
 
 ### 2. 只动该动的，不顺手"改善"邻居
 
@@ -97,7 +85,7 @@ frontmatter：`doc_type=feature-design` / `feature` 一致 / `status=approved` /
 ### 2. {slug}-checklist.yaml 在不在
 
 - 文件存在，`feature` 字段一致
-- `steps` 非空（行为切片，每个 step = 一个可验证的行为变化）；`checks` 非空
+- `steps` 非空（design 已产出，paradigm 维度切片，4-8 步）；`checks` 非空
 - 不存在 → 退回 `cs-feat-design` 生成
 
 ### 3. 把上下文读全
@@ -105,21 +93,28 @@ frontmatter：`doc_type=feature-design` / `feature` 一致 / `status=approved` /
 - 方案 doc 全文（标准 design 重点：第 1 节、2.1/2.2/2.3/2.4、3）
 - `{slug}-checklist.yaml`、需求来源（用户描述 + brainstorm note）、`.codestable/attention.md`
 - 第 2.1 节接口示例的来源位置 / fastforward 第 1 节改动点提到的代码文件——读相关函数即可
+- 如果是 review-fix：读取 `{slug}-review.md`，只把 unresolved `blocking` findings 作为本轮目标
+- 如果是 qa-fix：读取 `{slug}-qa.md`，只把 failed / blocked QA items 作为本轮目标
 
-### 4. 理解 checklist 中的行为切片
-
-`steps` 现在是**行为切片**（behavior slices），不是 paradigm 维度切片。每个 step：
-- 描述一个用户可感知的行为变化（如"用户可以用有效购物车结账"）
-- 必须包含完整的 RED → GREEN → REFACTOR 闭环
-- 有明确的退出信号（测试通过 + 行为可验证）
-
-如果发现某个 step 太大（需要写 3+ 个独立测试）或太小（不值得单独一个测试），跟用户对齐后拆分 / 合并，**不偷偷做**。
-
-### 5. 跟用户确认从哪一步开始
+### 4. 跟用户确认从哪一步开始
 
 通常第 1 步；接续上次中断从已 `done` 的下一步继续。
 
-### 6. design 第 2.5 节微重构的衔接
+design 给的 `steps` 是 paradigm 维度切片（编排骨架 → 计算节点 → 持久化 → 测试），**具体每步改哪个文件由你执行时决定**。如果某一步实际是 3 个独立子动作、或发现微重构是它的前置（参考反射检查），跟用户对齐后追加 / 拆分 steps，**不偷偷做**。
+
+### 5. 基线预检
+
+动第一行代码前，读取 design 里的"必跑验证命令 / 基线风险"。对本 feature 最相关、成本可接受的命令先跑一遍（至少 typecheck / targeted tests；前端可先确认 dev server / 页面入口可打开）。
+
+- 全绿：在工作记录里记"基线预检通过：{命令列表}"
+- 有红灯：先判断是既有问题还是本 feature 必须先修的前置
+  - 既有红灯且不影响当前 feature：记录为基线风险，后续验证只要求"不新增失败 / targeted checks 通过"，最终汇报必须写清
+  - 既有红灯但会影响当前 feature：停下来和用户确认，是先补 safety net / 修基线，还是调整 design
+  - 无法归因：不要继续大改，先缩小命令或读错误定位
+
+这一步的目的不是把全仓库修绿，而是避免把"启动前已经坏"误判为本 step 失败，也避免在坏基线上继续堆代码。
+
+**design 第 2.5 节微重构的衔接**：
 
 - 如果 2.5 结论是"做微重构（拆文件）"或"做微重构（重组目录）"，checklist 第 1 步就是它——**独立跑完**，按 2.5 节"行为不变怎么验证"那条核对：
   - 拆文件：编译绿灯 + 现有测试通过 + 对外接口签名零 diff
@@ -127,57 +122,43 @@ frontmatter：`doc_type=feature-design` / `feature` 一致 / `status=approved` /
 
   **不要合并到下一步**——一旦混在一起，行为变更和结构变更就分不开，出问题回滚不到干净中间态
 - 如果 2.5 结论是"不做"但写到中途反射检查触发了拆分信号 → 走下面"反射检查"那条路径（停下来 → 和用户对齐 → 能 provable 解决就追加独立 step），**不要绕过用户确认偷偷追加**
-- 如果 2.5 末尾有"建议沉淀的 convention"段：implement 阶段**不主动归档**——只在重组目录跑通且行为零改动确认后，在汇报里带一句"design 2.5 建议沉淀的 convention 已就绪，等 acceptance 阶段确认是否走 cs-decide"，把决定权交给 acceptance / 用户
+- 如果 2.5 末尾有"建议沉淀的 convention"段：implement 阶段**不主动归档**——只在重组目录跑通且行为零改动确认后，在汇报里带一句"design 2.5 建议沉淀的 convention 已就绪，等 acceptance 阶段确认是否走 cs-keep"，把决定权交给 acceptance / 用户
 
 ---
 
-## TDD 推进流程
+## 实现期间的几条核心约束
 
-每个行为切片按 **RED → GREEN → REFACTOR → 记录** 四阶段推进。详细节奏看 `reference/examples.md` 第 1 节，这里只列核心要点：
+### 严格按 steps 顺序走
 
-### 阶段 1：RED（写测试）
+按 `steps` 列表顺序执行，不合并、不跳。每一步开始前先重读该 step 的 `action` / `exit_signal`，确认它是本轮唯一目标；每完成一步立即验证退出信号，并把 status `pending` → `done`。
 
-1. 明确当前切片的行为（从 design 第 3 节关键场景清单取）
-2. 写一个测试（测试名描述 WHAT 不描述 HOW，只测公开接口）
-3. 运行测试 → 必须失败（RED）
+最常见违规是"顺手把下一步也做了"——每步都对应独立可验证的退出信号，两步合做意味着出问题时不知道是哪一步引入的、回滚也回不到干净中间态。
 
-**停止信号**：design 没说边界条件、需要 mock 内部协作者、需要直接访问内部状态 → 停，回 design 谈或重新设计接口。
+每步完成后立刻把 `{slug}-checklist.yaml` 对应 step 状态落盘。不要等所有步骤完成再统一改；状态文件就是断点恢复锚点。中断恢复时先读它，而不是靠记忆。
 
-### 阶段 2：GREEN（写实现）
+### 每步都要有证据块
 
-1. 写最少代码让测试通过（只为当前测试，允许硬编码）
-2. 运行测试 → 必须通过（GREEN）
-3. 运行所有相关测试 → 确保没破坏已有功能
+完成每个 step 后，在工作记录 / 汇报素材里留下最小证据：
 
-**最少代码判据**：删掉任何一行测试就会失败 ✅；有"为了以后"的代码 ❌。
+- 退出信号：原文摘出
+- 验证动作：跑了什么命令 / 看了什么页面 / 检查了什么 diff / 调了什么接口
+- 结果：通过 / 未通过；失败写真实错误摘要
+- 影响面：本步新增 / 修改的主要函数、类型、路由、配置或文档
+- 清洁度：本步新增代码里是否有调试输出、临时 TODO/FIXME、注释掉代码、无用 import、方案外文件
 
-### 阶段 3：REFACTOR（重构）
+证据不要求每步都发给用户，但最终完成汇报必须能按 step 追溯。UI step 的证据不能只写 typecheck，必须有浏览器 / 截图 / 肉眼验证；后端接口 step 优先用测试或真实请求证明；纯类型约束可以用 typecheck 证明。
 
-**只在 GREEN 状态重构，never 在 RED 时重构。**
+### Step 清洁度检查
 
-1. 扫描重构候选（重复代码、长方法、浅模块等，参考 `reference/examples.md` 第 1 节）
-2. 每次小步重构，运行测试确保通过
-3. 重构完成信号：无明显坏味道，不为"优雅"过度设计
+每步验证时额外看本步 diff：
 
-**边界**：影响范围内可重构 ✅；范围外记"顺手发现" ❌；需改接口走 `cs-refactor` ❌。
+- 新增调试输出：`console.log` / `console.error` / `print` / `fmt.Println` / 临时 logger
+- 新增临时 TODO / FIXME / XXX
+- 注释掉的旧代码或大段死代码
+- 新增 import 但未使用
+- 非本 step 需要的文件改动
 
-### 阶段 4：验证与记录
-
-1. 更新 checklist：当前 step `status: pending` → `done`
-2. 记录改动（文件、函数、测试）
-3. 可选同步进度（复杂 step 跟用户简短汇报）
-
-### 推进顺序约束
-
-- 严格按 steps 顺序走，不跳步、不合并
-- 一个 step 走完全部 4 个阶段再进入下一个
-- 发现 step 太大 / 太小 → 停下来跟用户对齐拆分 / 合并
-
-完整示例和常见问题看 `reference/examples.md` 第 1-8 节。
-
----
-
-## 实现期间的核心约束
+命中就按失败处理：能当场删掉就删并重跑验证；确实是功能的一部分（例如新增日志能力）必须在 design / 汇报里说明原因和范围。清洁度不是审美问题，它是防止临时施工痕迹进入后续阶段。
 
 ### 不做方案外的改动
 
@@ -201,6 +182,34 @@ frontmatter：`doc_type=feature-design` / `feature` 一致 / `status=approved` /
 
 写代码时冒出 `if (特殊情况) { 特殊处理 }` 这种结构，**停**。这种分支基本只有一个原因：方案没覆盖到这种情况。继续写得到的是"为了让代码能跑而加的特殊逻辑"——下次别人改这块时不知道这个分支为什么存在。回方案谈：补进 design / 砍掉 / 明确为遗留问题。
 
+### Step 失败恢复：诊断 → 窄修复 → 交还
+
+某个 step 的退出信号或相关测试失败时，不直接推进下一步，也不把失败掩进最终汇报。按三段处理：
+
+1. **第一次失败：失败诊断**
+   写清失败项、实际错误、刚改过的范围、根因假设；只围绕当前 step 做一次重试。重试前不要扩大 scope。
+2. **第二次失败：窄范围修复说明**
+   如果重试仍失败，在 feature 目录写一份临时 `{slug}-step-N-fix.md`（或在完成汇报中等价记录）：
+   - 失败的 exit_signal / checks
+   - 根因判断
+   - 只允许改哪些文件 / 行为
+   - 修复后必须重跑哪些验证
+   执行这份窄修复，成功后回到原 step 的验证，不直接标 done。
+3. **第三次失败：交还用户**
+   仍失败就停下来，报告三次尝试、证据、当前风险和建议下一步。不要为了"完成流程"继续改大范围代码。
+
+这个机制只处理当前 step 的失败，不是绕过 design 的许可证。发现设计缺口仍然回 `cs-feat-design`，不是用窄范围修复说明现场拍板。
+
+### 用户中断与续跑
+
+如果用户在实现中途发来新消息：
+
+- 当前 step 未到安全点：先把正在做的最小变更验证 / 回滚到可解释状态，再回应
+- 当前 step 已验证：更新 checklist 状态和证据后停在下一步开始前
+- 用户要求改方向：不要继续执行旧 checklist；先判断是改 design、拆 step、还是取消当前 feature
+
+恢复时固定顺序：读 design → 读 checklist 当前状态 → 读最近实现汇报 / 临时 step fix 文档 → 从第一条 `pending` step 继续。
+
 ### 代码质量反射检查
 
 除上面流程约束外，还有一组针对代码质量的反射检查——看 `.codestable/reference/shared-conventions.md` 第 7 节。
@@ -212,149 +221,76 @@ frontmatter：`doc_type=feature-design` / `feature` 一致 / `status=approved` /
 - **能用"只搬不改行为"解决**（拆函数 / 拆文件 / 移动定义，编译器全程绿灯，对外签名零 diff）→ 和用户对齐后**追加为独立 step**插在当前 step 之前，跑完独立验证退出再继续
 - **超出"只搬不改行为"边界**（要改函数签名 / 改返回值结构 / 改调用关系语义 / 模块拆合）→ **本 feature 不做**，记成"顺手发现"格式提示用户后续走 `cs-refactor`，当前 step 用最少的改动绕过去；不要因为"反正都看到了"就在 feature 里顺手做掉——这会把功能 PR 稀释成综合改动，也违反 design 2.5 早就划好的边界
 
+### 最后一轮本地审计
+
+所有 steps 标 `done` 后，完成汇报前做一轮小型 final audit：
+
+1. 重读 `{slug}-design.md` 第 1 / 2 / 3 节和 `{slug}-checklist.yaml`
+2. 逐条确认 steps 全 done、checks 还未验收但已有实现证据
+3. 重新跑本 feature 所需的 build / typecheck / lint / test 或项目等价命令；有前端改动则跑浏览器验证
+4. 过一遍 `git diff`，检查本次新增的 debug 输出、临时 TODO/FIXME、注释掉的代码、无用 import、方案外文件
+5. 用第 3 节关键场景倒查：有没有某条没有证据；没有就补测或回实现
+6. 列出实际交付物：新增 / 修改 / 删除的代码入口、配置、schema、路由、文档、roadmap 状态，为 acceptance 的交付物复核做索引
+7. 列出知识候选：项目命令、环境坑、稳定 convention、库 API 坑、用户确认的偏好；不直接写入 knowledge，只交给 acceptance 第 8 节处理
+
+audit 发现问题就回到对应 step 处理，不把问题留给 acceptance 首次发现。
+
+### review-fix 模式
+
+当 `cs-code-review` 产出 `status: changes-requested` 且有 unresolved `blocking` findings 时，进入 review-fix 模式：
+
+1. 只读取并修复 review 报告里的 blocking findings；不要借机实现新需求、重构邻居或处理非阻塞建议。
+2. 每个 REV 编号都要留下修复证据：改动文件、验证命令、为什么阻塞已解除。
+3. 如果修 blocking 需要改变 design 契约、扩大 feature 范围或触碰 roadmap item 边界，停下来回 `cs-feat-design` / 用户确认。
+4. 修完后跑相关验证和清洁度检查，输出 review-fix 汇报。
+5. 下一步必须重跑 `cs-code-review`；不能直接进入 `cs-feat-accept`。
+
+review-fix 不要求 checklist 新增普通 step，除非用户明确要求把修复动作纳入 checklist 追踪。默认把 REV 编号和证据写在汇报里，保留 review 报告作审查输入。
+
+### qa-fix 模式
+
+当 `cs-feat-qa` 产出 `status: failed` 或 `status: blocked` 且失败项归因于本 feature 时，进入 qa-fix 模式：
+
+1. 只读取并修复 QA 报告里的 failed / blocked items；不要借机处理新需求、非阻塞建议或 review 已接受的 residual risk。
+2. 每个 QA 编号都要留下修复证据：改动文件、验证命令、为什么失败已解除。
+3. 如果修 QA 失败项需要改变 design 契约、扩大 feature 范围或触碰 roadmap item 边界，停下来回 `cs-feat-design` / 用户确认。
+4. 修完后跑相关验证和清洁度检查，输出 qa-fix 汇报。
+5. qa-fix 改变了代码 diff，下一步必须重跑 `cs-code-review`；review passed 后再重跑 `cs-feat-qa`。不能直接进入 `cs-feat-accept`。
+
+qa-fix 不要求 checklist 新增普通 step，除非用户明确要求把修复动作纳入 checklist 追踪。默认把 QA 编号和证据写在汇报里，保留 QA 报告作复测输入。
+
 ---
 
 ## 写完后输出统一汇报
 
-所有步骤完成后用下面模板汇报，**停下来等用户 review**。
-
-固定模板的意义：含糊汇报等于把验证责任推回用户。固定模板逼你把改了哪些文件、是否触碰方案外、是否引入新概念一一说清楚。
-
-```markdown
-## 实现完成汇报
-
-### 动了哪些文件
-{git status 真实输出}
-
-### 改了哪些函数 / 类型（按步骤分组）
-**步骤 N：{步骤名}**
-- file:line  函数名  改动类型（新增 / 修改 / 删除）
-- 测试：test-file:line  测试名
-
-### TDD 推进记录
-**步骤 N：{步骤名}**
-- RED: {写了什么测试，测试什么行为}
-- GREEN: {写了哪些代码让测试通过}
-- REFACTOR: {做了哪些重构 / 无}
-
-### 是否触碰到方案外的文件？
-{是 / 否。是的话说明原因 + 是否已同步更新方案 doc}
-
-### 是否引入了方案 doc 里没有的新概念 / 抽象？
-{是 / 否。是的话说明已回填方案 doc（标准 design 补第 0 节 + 第 2.1 节；fastforward 补第 1 节）并做过 grep 防冲突}
-
-### 代码质量反射检查自检
-{对照 shared-conventions 第 7 节，触发哪些信号 + 怎么处理；都没触发写"无触发"}
-
-### 测试质量自检
-- [ ] 所有测试都测公开接口（不测私有方法）
-- [ ] 测试描述 WHAT 不描述 HOW
-- [ ] 没有 mock 内部协作者
-- [ ] 测试会在重构后继续通过
-- [ ] 每个测试只验证一个行为
-
-### 验收场景自检
-**标准 design**：对照第 3 节关键场景清单，每条靠什么证据满足（类型 / 单测 / 集成 / 手工 / assert）+ 反向核对项是否守住
-**Fastforward design**：对照第 2 节验收标准逐条核对
-```
-
-汇报后停等 review。
+所有步骤完成后，按 `references/reference.md` 的"实现完成汇报"模板输出并停等用户 review。模板必须列出真实 `git status`、按步骤归类的改动、方案外触碰、新概念、step 证据、清洁度、交付物、知识候选、最后一轮本地审计和验收场景自检。
 
 ---
 
-## 测试覆盖与验收场景的关系
+## 测试用例怎么落
 
-标准 design 第 3 节"关键场景清单"每条 = 一个可验证行为约束。你的活是把每条变成可观察证据：单测 / 集成 / 手工操作 / 类型编译期保证。
-
-**关键区别**：
-- **测试通过** = 你写的用例过了
-- **验收场景满足** = 每条场景都有证据覆盖
-
-在 TDD 推进过程中：
-1. 每个 step 的 RED 阶段，测试应该对应一条或多条验收场景
-2. 所有 steps 完成后，验收场景清单应该被完全覆盖
-3. 如果某条验收场景没有对应的测试 → 漏了一个 step
-
-类型系统保证的（如 TypeScript 签名直接排除某种调用），汇报里说"类型签名已落地，编译期保证"。
-
----
-
-## 文档同步要求
-
-实现过程中如果对 design 做了补充（新增概念、触碰方案外文件、补充边界条件），必须同步更新方案 doc：
-
-**标准 design**：
-- 新增概念 → 补第 0 节术语表
-- 新增接口 / 修改接口 → 补第 2.1 节
-- 改变编排逻辑 → 补第 2.2 节
-- 新增挂载点 → 补第 2.3 节
-
-**Fastforward design**：
-- 新增改动点 → 补第 1 节
-
-**触发时机**：发现需要补充时立即停下来更新 design，然后继续实现。不要等到最后再统一补。
-
-**用户确认**：涉及方案外改动 / 新增概念时，更新 design 后必须跟用户确认，不能自己决定。
+标准 design 第 3 节"关键场景清单"每条 = 一个可验证行为约束。把每条变成可观察证据：单测 / 集成 / 手工操作 / 类型编译期保证。coding step 适合自动化测试时，可在 step 内采用 TDD vertical slice；这是 `cs-feat-impl` 的内嵌实现策略，不是切换到独立 `tdd` skill。具体测试策略看 `references/reference.md` 和 `references/tdd.md`。
 
 ---
 
 ## 退出条件
 
-- [ ] 所有 steps 的 status 都 `done`
-- [ ] 每个 step 都完成了 RED → GREEN → REFACTOR 闭环
-- [ ] 完成汇报已输出，用户 review 通过
-- [ ] 没有未处理的"需要叫停"信号
-- [ ] 第 3 节关键场景每条都有证据 / 测试覆盖（fastforward 对照第 2 节）
-- [ ] 所有测试都通过
-- [ ] 测试质量自检通过（测公开接口、描述行为、不 mock 内部协作者）
-- [ ] 没有"顺手发现"被偷偷修掉（都进 issue 列表）
-- [ ] 没有方案外文件改动（或已同步更新方案 doc）
-- [ ] 方案 doc 已同步（新增概念、接口变更等）
+完整 checklist 见 `references/reference.md`。主文件保留硬门摘要：
+
+- [ ] 所有 steps 的 status 都 `done`，且每步有退出信号证据。
+- [ ] 完成汇报已输出，用户 review 通过（或 review-fix / qa-fix 汇报已输出，等待重跑对应 gate）。
+- [ ] 没有未处理的"需要叫停"信号、方案外改动或清洁度缺口。
+- [ ] 开始前做过基线预检；完成前做过最后一轮本地审计。
+- [ ] 第 3 节关键场景每条都有证据 / 测试覆盖（fastforward 对照第 2 节）。
 
 ---
 
 ## 退出后
 
-告诉用户："所有步骤完成，方案 doc 已同步。下一步阶段 3 验收闭环，触发 cs-feat-accept。"
-
-别自己顺手开始写验收报告——验收需要独立的 checklist 节奏，提前进入会让把关失效。
-
-**实现过程中如果踩到了项目通用的硬约束 / 命令陷阱 / 环境设置**（"啊原来这个项目要先 X 才能 Y"，一两行能讲清、下个 feature 的 AI 还会再撞一次）→ 在告诉用户去 accept 前**顺便提一句**："这次发现 {具体那条}，是不是要 `cs-note` 一下加到 attention.md，免得下次再踩？"——单条即可，不连写多条；用户说"等 accept 一起处理" 就跳过，accept 第 8 节会兜底盘点。
+告诉用户下一步：普通实现完成后触发 `cs-code-review`；review-fix 后重跑 `cs-code-review`；qa-fix 后重跑 `cs-code-review` 和 `cs-feat-qa`。不要顺手进入验收报告；完整话术见 `references/reference.md`。
 
 ---
 
 ## 容易踩的坑
 
-### TDD 流程相关
-- **水平切片**——先写所有测试再写所有实现，导致测试基于想象而非实际行为
-- **GREEN 阶段过度设计**——为了"优雅"写了多余代码，而不是最少代码
-- **RED 阶段写多个测试**——应该一次只写一个测试
-- **在 RED 状态下重构**——必须先到 GREEN 再重构
-- **测试实现细节**——测试私有方法、mock 内部协作者、断言调用次数
-- **测试名描述 HOW**——应该描述 WHAT（行为）
-- **一个测试验证多个行为**——应该拆成多个测试
-
-### 原有约束相关
-- 代码只写了一部分就发完成汇报——汇报只在全部完成后发一次
-- 汇报里写"修改了相关文件"而不列 file:line
-- 看到方案外的代码顺手改了
-- 引入新类型 / 概念但没回去更新方案 doc
-- 加 `if (用户是 X) { 特殊处理 }` 补丁分支而不停下来
-- 用户 review 还没通过就自己进入验收阶段
-- 关键场景清单一条都没落证据
-- 把行为切片当 file:line 读——steps 是行为不是文件清单
-- step 内部偷偷拆子步骤而不跟用户对齐 = 绕过 review
-- 所有测试写完了才开始写实现——违反垂直切片原则
-- 测试和实现混在一个 step 里但没有按 RED-GREEN-REFACTOR 分阶段记录
-
----
-
-## 相关文档
-
-- `.codestable/reference/shared-conventions.md` 第 7 节 — 代码质量反射检查
-- `reference/examples.md` — TDD 完整示例、测试好坏对比、常见问题 Q&A
-- `skills/engineering/tdd/tests.md` — 好测试 vs 坏测试示例（外部参考）
-- `skills/engineering/tdd/refactoring.md` — 重构候选清单（外部参考）
-- `skills/engineering/tdd/interface-design.md` — 可测试性接口设计（外部参考）
-- `cs-feat-design` — 上游：生成 design 和 checklist
-- `cs-feat-accept` — 下游：验收闭环
+完整列表见 `references/reference.md`。最常见红线：半成品汇报、方案外顺手改、新概念不回填、补丁分支硬冲、跳过 review/QA gate、关键场景没有证据。
