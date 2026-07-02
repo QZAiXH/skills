@@ -12,7 +12,7 @@ SKILL.md 只保留流程骨架，具体格式在这里。
 ---
 doc_type: roadmap
 slug: permission-system
-status: active          # active | paused | completed
+status: draft           # draft | active | paused | completed
 created: YYYY-MM-DD
 last_reviewed: YYYY-MM-DD
 tags: [permission, auth]
@@ -21,7 +21,7 @@ related_architecture: []    # 相关 architecture doc slug，可空
 ---
 ```
 
-- `status`：`active` 进行中 / `paused` 暂停 / `completed` 所有条目 done 或 dropped
+- `status`：`draft` 待独立 review 和用户确认 / `active` 进行中 / `paused` 暂停 / `completed` 所有条目 done 或 dropped
 - `related_requirements`：本大需求涉及的 req slug，帮助跳转到"为什么要有这个能力"
 - `related_architecture`：会被改到的 architecture doc slug，帮助理解"改了会触碰哪些现状"
 
@@ -44,6 +44,15 @@ related_architecture: []    # 相关 architecture doc slug，可空
 - 能力 X（理由）
 - 能力 Y（指向另一份 roadmap / req）
 
+### Granularity Gate
+
+| 判断项 | 结论 |
+|---|---|
+| 为什么不是 single feature | {涉及多个独立交付 / 跨模块接口 / 依赖 DAG / 多阶段验证；若不是则退回 `cs-feat`} |
+| 为什么不是 brainstorm | {目标和成功标准已足够清楚；若不清楚则退回 `cs-brainstorm`} |
+| roadmap 边界 | {本次只覆盖哪些目标，哪些明确不做} |
+| 最小闭环 | {哪条 item 完成后产生最窄可验收闭环} |
+
 ## 3. 模块拆分（概设）
 
 拆成哪几个模块 / 组件、各自做什么。文字版结构树或 ASCII 框图都行 + 每个模块一段说明：
@@ -59,6 +68,7 @@ related_architecture: []    # 相关 architecture doc slug，可空
 - **职责**：{一两句讲清做什么、不做什么}
 - **承载的子 feature**：{slug-1, slug-2}
 - **触碰的现有代码 / 模块**：{已有的 X 模块 / 全新 / 重写某模块}
+- **Depth 判断**：{deep / shallow 风险 / pass-through；复杂度会藏在本 module 里，还是散到 callers}
 
 ### 模块 B / C · ...
 
@@ -96,6 +106,13 @@ payload: { user_id: str, role: str, changed_at: ISO8601 }
 - response 的 reason 在 allowed=true 时必须为 null
 - 事件必须幂等消费
 
+**Interface 设计检查**：
+- Module / interface：{哪个 module 暴露这个 interface；caller 必须知道哪些 invariant / ordering / error mode}
+- Seam placement：{seam 放在哪里；为什么 caller 和测试都应穿过这里}
+- Depth / locality：{interface 如何给 caller leverage；哪些变化会集中在 implementation 内}
+- Dependency strategy：{in-process / local-substitutable / remote-owned / true external}
+- Adapter：{无 / production + test adapters；若只有一个 adapter，说明为什么不是假 seam}
+
 ### 4.2 ...
 
 ### 4.x 共享数据结构 / 状态
@@ -121,6 +138,15 @@ payload: { user_id: str, role: str, changed_at: ISO8601 }
 
 **最小闭环**：第 {N} 条 `{slug}` 做完后 {描述能端到端跑通的最窄路径}。
 
+### Goal Coverage Matrix
+
+| Goal / completion signal | Covered by item(s) | Verification entry | Evidence type | Core? |
+|---|---|---|---|---|
+| {可观察完成信号 1} | {item slug} | {命令 / 手工路径 / API / 文档核验} | {test / command / screenshot / diff review / acceptance report} | yes |
+| {可观察完成信号 2} | {item slug} | {验证入口} | {证据类型} | no |
+
+规则：每个核心 goal 至少有一个 item 和一个验证入口；只有 H 类推断、没有可执行或可审计证据的核心目标不能静默通过 review。
+
 ## 6. 排期思路
 
 一段短的：为什么这样拆（按模块 / 用户价值 / 风险 / 依赖）；第一条为什么选它作最小闭环；中间有没有卡点（前置架构改动 / 外部依赖 / 设计决策）。
@@ -129,7 +155,7 @@ payload: { user_id: str, role: str, changed_at: ISO8601 }
 
 起草 / 刷新过程中发现、本 roadmap 不处理的事情交给用户决定：
 
-- `architecture/X.md` 对 Y 的描述已过时，建议另起 architecture update
+- `requirements/adrs/NNN.md` 中的 Y 决策已过时，建议另起一条 ADR superseded
 - requirement-Z 的边界和本 roadmap 第 5 条冲突，建议先对齐 req
 
 ## 8. 变更日志（update 模式）
@@ -198,6 +224,7 @@ python .codestable/tools/validate-yaml.py --file .codestable/roadmap/{slug}/{slu
 
 - [ ] 模块拆分讲清了？每个模块职责一句话？边界讲得清（哪些事这模块做、哪些不做）？
 - [ ] 接口契约写到函数签名 / 数据结构 / 协议字段 / 错误码这一级了？feature-design 看完不需要回来问就能直接照着实现？
+- [ ] 跨模块 interface 是否 deep？seam placement、dependency category、adapter 策略是否写清？
 - [ ] 共享数据结构 / 持久化 / 全局状态列齐了？
 - [ ] 没有跨模块接口的话第 4 节明确写"无跨模块接口"了？而不是空着 / "待定"？
 
@@ -210,6 +237,7 @@ python .codestable/tools/validate-yaml.py --file .codestable/roadmap/{slug}/{slu
 - [ ] 依赖关系讲得清具体理由？"B 需要 A 提供的 {具体产物}"
 - [ ] 最小闭环真是"最窄的端到端路径"？还是只是"最容易的一条"？
 - [ ] 有条目其实应该是 requirement 变化而不是 feature？（"把 XX 能力的边界改一下"）那种转 `cs-req`
+- [ ] Goal Coverage Matrix 是否覆盖每个核心完成信号？证据类型是否可被后续 acceptance 核验？
 
 ---
 
@@ -220,14 +248,17 @@ python .codestable/tools/validate-yaml.py --file .codestable/roadmap/{slug}/{slu
 > **架构方案层**
 > 1. 模块拆分对吗？边界划得合理？有该合并 / 该拆开的？
 > 2. 接口契约定得够具体吗？feature-design 拿着能直接照做？还是有"两边商量"的含糊地带？
-> 3. 共享数据结构 / 协议字段 / 错误码有遗漏？
+> 3. Interface 是否 deep？seam 放得对吗？adapter 是否真实需要？
+> 4. 共享数据结构 / 协议字段 / 错误码有遗漏？
 >
 > **feature 拆解层**
-> 4. 拆解粒度合适？每条都能独立做成 feature？
-> 5. 每条落在哪个模块标对了？
-> 6. 依赖关系对吗？有漏的前置或多余依赖？
-> 7. 最小闭环选得对？第一条做完真能端到端演示点什么？
-> 8. "明确不做"有遗漏？
-> 9. 排期顺序符合你的产品优先级？
+> 5. 拆解粒度合适？每条都能独立做成 feature？
+> 6. 每条落在哪个模块标对了？
+> 7. 依赖关系对吗？有漏的前置或多余依赖？
+> 8. 最小闭环选得对？第一条做完真能端到端演示点什么？
+> 9. "明确不做"有遗漏？
+> 10. 排期顺序符合你的产品优先级？
 >
-> 有修改意见直接说，确认后落盘 roadmap 目录和 items.yaml。
+> 有修改意见直接说，确认后把 roadmap 从 `draft` 标为 `active`。
+
+> 人工 review 前必须先有 `{slug}-roadmap-review.md` 且 `status: passed`。用户修改 roadmap/items 后，实质变化要重跑 `cs-roadmap-review`。

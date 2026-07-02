@@ -1,13 +1,13 @@
 ---
 name: cs-refactor
-description: 代码优化的子流程入口，处理"行为不变、结构变"的工作（结构 / 性能 / 可读性），按 scan → design → apply 分步执行每步人工放行。触发：用户说"优化一下 / 重构 / 重写 / 拆一下 / 性能不行 / 代码太长"且不夹带行为改动。不处理新需求 / bug / 跨模块架构重划。
+description: 受控重构入口。触发：优化/重构/拆分/性能/代码太长，且不改变行为、不新增需求。
 ---
 
 # cs-refactor
 
 ## 启动必读
 
-开始任何判断或动作前，先读取 `.codestable/attention.md`；缺失则视为骨架不完整，提示先补齐或运行 `cs-onboard`，不要回退到外部 AI 入口文件。
+开始任何判断或动作前，先执行 CodeStable preflight：读 `.codestable/attention.md`；缺失先 `cs-onboard`；不读外部 AI 入口替代（详见 `.codestable/reference/execution-conventions.md`）。
 
 AI 自己重构有两个稳定失败模式：一是不知道模块真实需求和约束，改出来的东西功能不等价；二是一次吞掉的范围超过上下文承载，改到后面忘了前面的约束。这流程在"想优化"和"动手改"之间塞了扫描清单 + 方法库，让 AI 只接自己能稳定做对的活。
 
@@ -16,6 +16,18 @@ scan（扫优化点清单）→ design（和用户定做哪几条 + 顺序）→
 ```
 
 **核心纪律**：行为等价是底线。一旦会改外部可观察行为 → 不走 refactor，走 feature（需求变）或 issue（bug 修）。
+
+**架构 deepening 模式**：用户说"架构优化 / 模块太浅 / seam 不对 / 可测试性差 / AI 难导航"时，仍走本技能三阶段，不生成 HTML。scan 用 `codebase-design` 词汇找 deepening opportunities；这是内嵌词汇引用，不切换到独立 `codebase-design` skill。候选项写进标准 `{slug}-scan.md`，用户勾选后再进 design/checklist/apply。
+
+## 执行 gate（worktree + commit）
+
+进入 apply 前运行 start gate，`{slug}` 为 refactor 目录名：
+
+```bash
+python3 .codestable/tools/codestable-worktree-gate.py --root . --json start --unit .codestable/refactors/YYYY-MM-DD-{slug}
+```
+
+gate 不通过不开始改代码；override 时先在 unit 目录写 `worktree-override.md`（reason / scope / approval）。apply 完成、收尾 commit 前运行 commit gate（同命令 `commit`）；不通过先处理 findings。gate 安装与 branch-guard hook 见 `.codestable/reference/branch-guard-hooks.md`。
 
 ---
 
@@ -84,8 +96,9 @@ scan（扫优化点清单）→ design（和用户定做哪几条 + 顺序）→
 - **L2 代码级重构**：超长函数（> 50 行 / 圈复杂度 > 10）、重复条件片段、神秘临时变量、多层嵌套 if-else
 - **L3 结构拆分**：组件 > 300 行 / 文件承担多件事 / 容器与展示混在一起 / 相同逻辑多组件各写一份（前端）；Controller 直接调 DB / Service 缺失 / Repository 被绕开（后端）
 - **L4 性能**：重复计算（可 memo）/ N+1 查询 / 列表无虚拟化或分页 / 事件监听无清理 / 大对象深响应（Vue）
+- **Architecture deepening**：shallow module、pass-through wrapper、seam 泄漏、假 adapter、测试越过 interface、locality 缺失。候选项分类写"架构"，字段按 `reference/scan-checklist-format.md` 的架构扩展。
 
-完整方法库在 `reference/methods.md`，扫描时全量加载作匹配表。
+完整方法库在 `reference/methods.md`、`reference/methods-l4.md` 和 `reference/methods-architecture.md`，扫描时全量加载作匹配表。
 
 ### 产出格式
 
@@ -103,7 +116,7 @@ scan（扫优化点清单）→ design（和用户定做哪几条 + 顺序）→
 ### 输入
 
 - 用户勾选过的 `{slug}-scan.md`
-- 方法库（每条勾选项必须映射到方法号 M-Ln-NN）
+- 方法库（每条勾选项必须映射到方法号 M-Ln-NN，含 architecture deepening 方法）
 
 ### 做的事
 
@@ -184,6 +197,7 @@ refactor: {YYYY-MM-DD}-{slug}
 
 ### 全部完成后
 
+- 完成后先进入 `cs-code-review` 做独立 diff 评审；Critical/Important 未清零不进 commit，scoped-commit 发起权归 `cs-code-review`
 - 跑全量测试 + 类型检查 + lint
 - 最后一次请用户整体目视确认（前端：打开主要页面点一圈）
 - 确认通过后收尾 commit，message 引用 refactor 目录
@@ -230,5 +244,7 @@ refactor: {YYYY-MM-DD}-{slug}
 - `cs-refactor-ff/SKILL.md` — 小重构超轻量通道
 - `reference/scan-checklist-format.md` — scan 清单条目字段 / 顺序 / 硬约束
 - `reference/refusal-routing.md` — scan 前置检查 7 条 + 路由表
-- `reference/methods.md` — 方法库（L1-L4 四层分类）
+- `reference/methods.md` — 方法库（L1-L3）
+- `reference/methods-l4.md` — 方法库（L4 性能与异步）
+- `reference/methods-architecture.md` — 方法库（architecture deepening）
 - `.codestable/reference/shared-conventions.md` — 跨工作流共享口径

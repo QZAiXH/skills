@@ -1,15 +1,15 @@
 ---
 name: cs-feat-ff
-description: feature 流程的超轻量通道——不写 design / checklist 直接动手，但先指引 AI 查 CodeStable 知识库再开工。触发：用户说"快速模式"、"fastforward"、"别那么多步骤"、"直接开干"，且需求小到不值得走 design 流程。
+description: Feature 快速通道。触发：快速模式/直接开干，且需求小到不值得 design。
 ---
 
 # cs-feat-ff
 
 ## 启动必读
 
-开始任何判断或动作前，先读取 `.codestable/attention.md`；缺失则视为骨架不完整，提示先补齐或运行 `cs-onboard`，不要回退到外部 AI 入口文件。
+开始任何判断或动作前，先执行 CodeStable preflight：读 `.codestable/attention.md`；缺失先 `cs-onboard`；不读外部 AI 入口替代（详见 `.codestable/reference/execution-conventions.md`）。
 
-用户让你做小功能时本来 AI 就会直接动手——这个技能**不改变这件事**。它只做一件事：动手前把项目里已沉淀的 CodeStable 知识指给你，按需搜一下，写出来的代码就比裸写多一层保护；动手后回写一份**最简的 `{slug}-ff-note.md`** 让这次工作可追溯、可被 cs-arch / cs-req backfill 看到、能纳入 scoped-commit 提交。
+用户让你做小功能时本来 AI 就会直接动手——这个技能**不改变这件事**。它只做一件事：动手前把项目里已沉淀的 CodeStable 知识指给你，按需搜一下，写出来的代码就比裸写多一层保护；动手后回写一份**最简的 `{slug}-ff-note.md`** 让这次工作可追溯、可被 cs-req / cs-domain backfill 看到、能纳入 scoped-commit 提交。
 
 很轻：没有 design doc / checklist / 验收清单 / 动手前的用户确认。看完指引，该读代码读、该写代码写、写完回写一段话。
 
@@ -19,14 +19,13 @@ description: feature 流程的超轻量通道——不写 design / checklist 直
 
 Glob `.codestable/` 发现可用目录和文档，按需取用：
 
-- **`architecture/`** — ARCHITECTURE.md 总入口 + 子系统 doc。改跨模块的东西前看一眼避免违反边界
-- **`compound/`** — learning / trick / decision / explore 四类沉淀：
+- **`requirements/CONTEXT.md`** — 领域术语；用项目术语命名，不自己造名
+- **`requirements/adrs/`** — 已拍板的架构决策；改跨模块的东西前 grep 相关 adr 避免违反
+- **`compound/`** — 沉淀的坑点 / 技巧 / 调研：
   ```bash
-  python .codestable/tools/search-yaml.py --dir .codestable/compound --filter doc_type=learning --query "关键词"
-  python .codestable/tools/search-yaml.py --dir .codestable/compound --filter doc_type=decision --query "关键词"
-  python .codestable/tools/search-yaml.py --dir .codestable/compound --filter doc_type=trick --query "关键词"
+  grep -r "关键词" .codestable/compound/
   ```
-- **`requirements/`** — 有相关 req 时读边界
+- **`requirements/{slug}.md`** — 有相关 req 时读边界
 - **`features/`** — 有同类 feature 时参考其 design
 - **`reference/`** — shared-conventions.md / tools.md
 
@@ -36,16 +35,40 @@ Glob `.codestable/` 发现可用目录和文档，按需取用：
 
 动手前问 2 个问题：
 
-1. **这块代码以前有人栽过跟头吗？** → 搜 `compound/` 的 learning
-2. **这块代码有没有已经拍板的写法约束？** → 搜 `compound/` 的 decision + 看 `architecture/` 相关子系统
+1. **这块代码以前有人栽过跟头吗？** → `grep -r "关键词" .codestable/compound/`
+2. **这块代码有没有已经拍板的写法约束？** → 看 `requirements/adrs/` 相关 ADR + grep `compound/` 找写法沉淀
 
 命中就把结论融进实现（**按约束来写**，不是抄）。没命中按自己判断写很正常。搜不到换几个关键词再试。
+
+---
+
+## 执行 gate（worktree + commit）
+
+fastforward 直接改项目源码且是快速通道末端，两道 gate 仍要走。slug 未定时先按动作敲定（见下文"自动生成 slug"），unit 路径用 `.codestable/features/YYYY-MM-DD-{slug}`。
+
+动手前运行 start gate：
+
+```bash
+python3 .codestable/tools/codestable-worktree-gate.py --root . --json start --unit .codestable/features/YYYY-MM-DD-{slug}
+```
+
+gate 不通过就不要开始改代码；用户批准 override 时先在 unit 目录写 `worktree-override.md`（reason / scope / approval）。
+
+ff-note 落盘、收尾提交前运行 commit gate：
+
+```bash
+python3 .codestable/tools/codestable-worktree-gate.py --root . --json commit --unit .codestable/features/YYYY-MM-DD-{slug}
+```
+
+gate 不通过就先处理 findings，不把"验证已过"当成完成。gate 工具的安装与 branch-guard hook 说明见 `.codestable/reference/branch-guard-hooks.md`。
 
 ---
 
 ## 写代码时守住这几条
 
 design / implement 的硬约束在 fastforward 的精简版。没 design doc 不代表可以不讲——这些是让你"直接动手"时不偏向 AI 默认会踩的坑。
+
+先做 `.codestable/reference/shared-conventions.md` 第 7 节的**第一性原则 pre-pass**：外部行为、不可破约束、最小充分改动、必须不写的东西。下面每条都用这四项压住发散。
 
 ### 先想"放在哪儿"再写
 
@@ -148,7 +171,7 @@ tags: [...]
 
 - **不写 design doc / checklist / acceptance**——这就是 fastforward 的意义。要写就去 `cs-feat-design`
 - **不跟用户确认方案**——用户让你做小功能就是不想等你开会
-- **不在 `.codestable/` 里留 `{slug}-ff-note.md` 之外的新文件**——除非发现值得沉淀的坑 / 技巧，另起对话用 `cs-learn` / `cs-trick` 写
+- **不在 `.codestable/` 里留 `{slug}-ff-note.md` 之外的新文件**——除非发现值得沉淀的坑 / 技巧，另起对话用 `cs-keep` 写
 
 ---
 
@@ -158,7 +181,7 @@ tags: [...]
 
 - 改动涉及 3 个以上子系统
 - 需要引入新术语或和现有术语冲突
-- 要动 `.codestable/architecture/` 既定的模块边界
+- 要打破 `.codestable/requirements/adrs/` 既定的模块边界 ADR
 - 用户追加的要求让范围翻倍
 
 切回方式：触发 `cs-feat-design`。已写的代码在 design 里标"已部分实现"即可。
@@ -180,11 +203,12 @@ tags: [...]
 - **提交范围**：本次代码改动 + `{slug}-ff-note.md`
 - ff-note 落盘后告诉用户"已就绪，是否代为 commit？"，用户明确同意才执行
 
+收尾 commit 前先进入 `cs-code-review` 做一轮独立 diff 评审，Critical / Important 未清零不进 commit；scoped-commit 发起权归 `cs-code-review`。
+
 按 `shared-conventions.md` 第 3 节"feature-ff"收尾推荐顺序逐项一句话提示（用户"不用"立即跳过）：
 
-1. 暴露的坑 → "沉淀 learning？（`cs-learn`）"
-2. 拍板的长期约束 → "归档决定？（`cs-decide`）"
-3. 最后问是否代为 scoped-commit
+1. 暴露的坑或拍板的长期约束 → "沉淀到 compound？（`cs-keep`）"
+2. 最后问是否代为 scoped-commit
 
 ---
 

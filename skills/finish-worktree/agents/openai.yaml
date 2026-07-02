@@ -1,0 +1,4 @@
+interface:
+  display_name: "Finish Worktree"
+  short_description: "Commit finished changes and safely remove worktrees"
+  default_prompt: "Use $finish-worktree to safely commit a finished worktree and remove it after merge or explicit approval."
